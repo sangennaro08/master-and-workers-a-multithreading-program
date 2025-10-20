@@ -6,6 +6,7 @@
 #include <future>
 #include <cstdlib>
 #include <random>
+#include <queue>
 
 using namespace std;
 
@@ -53,18 +54,17 @@ class worker{
     promise<double> final;
     mt19937 generatore;
 
-    worker(int ID,vector <task*>& task_generated):
+    worker(int ID,queue <task*>& task_generated):
     generatore(chrono::system_clock::now().time_since_epoch().count() + ID)
-
     {
 
         ID_worker=ID;
 
         {
             lock_guard<mutex> lock(dip);
-            t=task_generated.at(task_generated.size()-1);
+            t=task_generated.front();
             
-            task_generated.pop_back();
+            task_generated.pop();
             
             th=thread(&worker::start_work,this,&task_generated);//evidenzia in base all'oggetto l'indirizzo della funzione
             
@@ -75,7 +75,7 @@ class worker{
     
     ~worker(){delete t;}
 
-    void start_work(vector <task*>* task_generated){
+    void start_work(queue <task*>* task_generated){
 
         while(true){
 
@@ -103,24 +103,22 @@ class worker{
 
             }   
             
-            
-
         }
 
     }
 
 
     //funzione che permette a un worker di ottenere un lavoro disponibile al momento
-    bool get_new_work(vector <task*>** task_generated){
+    bool get_new_work(queue <task*>** task_generated){
 
         {
             lock_guard<mutex> lock(dip);
 
             if((**task_generated).size()!=0){
 
-                t=(**task_generated).at((**task_generated).size()-1);
-                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(**task_generated).at((**task_generated).size()-1)->tipo<<"\n\n";
-                (**task_generated).pop_back();
+                t=(**task_generated).front();
+                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(**task_generated).front()->tipo<<"\n\n";
+                (**task_generated).pop();
 
                 return true;
 
@@ -167,7 +165,7 @@ class master{
     public:
 
     vector <worker*> workers;
-    vector <task*>   task_generated;
+    queue <task*>   task_generated;
 
     void create_workers(){
 
@@ -185,7 +183,7 @@ class master{
 
         for(int i=0;i<lavori;i++){
 
-            task_generated.push_back(new task((rand()%10)+1,type_task[i]));
+            task_generated.push(new task((rand()%10)+1,type_task[i]));
             
 
         }
@@ -204,9 +202,10 @@ class master{
 
     void delete_tasks(){
 
-        for(auto t : task_generated){
+        while(!task_generated.empty()){
 
-            delete t;
+            delete task_generated.front();        
+            task_generated.pop();
 
         }
 
@@ -227,6 +226,7 @@ int main(){
     while(dipendenti!=0){
 
 
+    
     }
 
     cout<<"tutti i dipendenti hanno finito di lavorare\n";

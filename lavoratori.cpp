@@ -3,6 +3,7 @@
 #include <thread>
 #include <mutex>
 #include <semaphore>
+#include <queue>
 
 using namespace std;
 
@@ -43,15 +44,15 @@ class worker{
 
     public:
     //creazione thread che lavora    
-    worker(int ID,vector <task*>& task_generated){
+    worker(int ID,queue <task*>& task_generated){
         
         ID_worker=ID;  
         
         {
 
             lock_guard<mutex> lock(dip);
-            t=task_generated.at(task_generated.size()-1);
-            task_generated.pop_back();
+            t=task_generated.front();
+            task_generated.pop();
 
             th=thread(&worker::work_task,this,&task_generated);//errore per refence dandling meglio farlo con puntatore come fatto qua
 
@@ -65,7 +66,7 @@ class worker{
 
     //il thread lavora le tasks notare il doppio puntatore per evitare refence dandling
     
-    void work_task(vector <task*>* task_generated){
+    void work_task(queue <task*>* task_generated){
         
         while(true){
 
@@ -104,7 +105,7 @@ void join_thread() {
 
 }
 
-bool get_new_task(vector <task*>** task_generated){
+bool get_new_task(queue <task*>** task_generated){
 
         //se il thread vede che ci sono altre tasks prende quella per ultima inserita e viene tolta(tolto dall'utilizzo ma non dinamicamente)
         {
@@ -115,9 +116,9 @@ bool get_new_task(vector <task*>** task_generated){
 
                 
                 
-                t=(**task_generated).at((**task_generated).size()-1);
-                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(**task_generated).at((**task_generated).size()-1)->tipo<<"\n\n";
-                (**task_generated).pop_back();
+                t=(**task_generated).front();
+                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(**task_generated).front()->tipo<<"\n\n";
+                (**task_generated).pop();
                 
                 return true;
                 
@@ -138,7 +139,7 @@ class master{
     public:
 
     vector <worker*> tot_dipendenti;
-    vector <task*> task_generated;
+    queue  <task*> task_generated;
 
     //-----------------------------------creazioni tasks e workers-----------------------------------
     void create_tasks(){
@@ -146,7 +147,7 @@ class master{
         for(int i=0;i<lavori;i++){
 
             
-            task_generated.emplace_back(new task((rand()%10)+1,type_task[i]));
+            task_generated.push(new task((rand()%10)+1,type_task[i]));
             
         }
         
@@ -173,16 +174,18 @@ class master{
         }
     }
 
-    void delete_tasks(){
+    void delete_tasks()
+    {
 
-        for(auto task : task_generated){
+        while (!task_generated.empty()){
 
-            delete task;
+            delete task_generated.front();        
+            task_generated.pop();
 
         }
 
 
-    }
+    }    
     
 };
 
@@ -212,7 +215,6 @@ int main()
 
     //elimino memoria allocata
     M.delete_workers();
-    M.delete_tasks();
 
     return 0;
 }
@@ -264,6 +266,5 @@ se facciamo &task_generated e non ref(task_generated) il problema cade in quanto
 PUNTANDO DIRETTAMENTE ALLA CELLA senza variabili intermediarie che è caso del ref(...)
 
 quindi se mai noi lavoriamo con dei vector stare sempre attenti con l'utilizzo del ref()
-
 
 */
