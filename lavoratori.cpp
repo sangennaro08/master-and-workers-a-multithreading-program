@@ -172,6 +172,17 @@ class master{
 
         }
     }
+
+    void delete_tasks(){
+
+        for(auto task : task_generated){
+
+            delete task;
+
+        }
+
+
+    }
     
 };
 
@@ -199,7 +210,9 @@ int main()
     
     cout<<"tutti i lavoratori hanno finito di lavorare\n";
 
+    //elimino memoria allocata
     M.delete_workers();
+    M.delete_tasks();
 
     return 0;
 }
@@ -250,7 +263,7 @@ appena nato nel costruttore e faceva un pop_back allora la zona puntata diventav
 se facciamo &task_generated e non ref(task_generated) il problema cade in quanto anche se viene tolto quell'elemento STIAMO 
 PUNTANDO DIRETTAMENTE ALLA CELLA senza variabili intermediarie che è caso del ref(...)
 
-quindi se mai noi lavoriamo con dei vector stare sempre attenti con 
+quindi se mai noi lavoriamo con dei vector stare sempre attenti con l'utilizzo del ref()
 
 
 */
