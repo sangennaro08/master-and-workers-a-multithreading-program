@@ -215,6 +215,7 @@ int main()
 
     //elimino memoria allocata
     M.delete_workers();
+    M.delete_tasks();
 
     return 0;
 }
@@ -266,5 +267,6 @@ se facciamo &task_generated e non ref(task_generated) il problema cade in quanto
 PUNTANDO DIRETTAMENTE ALLA CELLA senza variabili intermediarie che è caso del ref(...)
 
 quindi se mai noi lavoriamo con dei vector stare sempre attenti con l'utilizzo del ref()
+
 
 */
