@@ -2,8 +2,9 @@
 #include <vector>
 #include <thread>
 #include <mutex>
-#include <semaphore>
 #include <queue>
+#include <memory>
+#include <condition_variable>
 
 using namespace std;
 
@@ -11,6 +12,9 @@ class task;
 
 mutex mut;
 mutex dip;
+mutex m;
+
+condition_variable cv;
 //variabili globali 
 int lavori=20;
 int dipendenti=5;
@@ -39,34 +43,30 @@ class worker{
     private:
 
     thread th;
-    task* t;
+    shared_ptr<task> t;
     int ID_worker=0;
 
     public:
     //creazione thread che lavora    
-    worker(int ID,queue <task*>& task_generated){
+    worker(int ID,queue <shared_ptr<task>>& task_generated){
         
         ID_worker=ID;  
         
         {
-
             lock_guard<mutex> lock(dip);
+
             t=task_generated.front();
             task_generated.pop();
-
+            
             th=thread(&worker::work_task,this,&task_generated);//errore per refence dandling meglio farlo con puntatore come fatto qua
-
         }
         
-        
-        
+               
     }
 
-    ~worker(){delete t;}
-
-    //il thread lavora le tasks notare il doppio puntatore per evitare refence dandling
+    //il thread lavora le tasks
     
-    void work_task(queue <task*>* task_generated){
+    void work_task(queue <shared_ptr<task>>* task_generated){
         
         while(true){
 
@@ -84,7 +84,7 @@ class worker{
                     cout<<"il lavoratore "<<ID_worker<<" ha completato la task di tipo "<<t->tipo<<" che è durato "
                     <<t->tempo_necessario<<" secondi\n\n";
 
-                    bool controllo=get_new_task(&task_generated);
+                    bool controllo=get_new_task(*(&task_generated));
 
                     if(!controllo)return;
                 }
@@ -95,7 +95,7 @@ class worker{
         
     }
 
-void join_thread() {
+   void join_thread() {
 
     if (th.joinable()) {
 
@@ -103,32 +103,34 @@ void join_thread() {
 
     }
 
-}
+    }
 
-bool get_new_task(queue <task*>** task_generated){
+bool get_new_task(queue <shared_ptr<task>>* task_generated){
 
         //se il thread vede che ci sono altre tasks prende quella per ultima inserita e viene tolta(tolto dall'utilizzo ma non dinamicamente)
         {
 
         lock_guard<mutex> lock(dip);//dip e non mut così evito overlapping dei testi in uscita
 
-            if((**task_generated).size()!=0){
+            if(!(*task_generated).empty()){
 
                 
                 
-                t=(**task_generated).front();
-                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(**task_generated).front()->tipo<<"\n\n";
-                (**task_generated).pop();
+                t=(*task_generated).front();
+                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(*task_generated).front()->tipo<<"\n\n";
+                (*task_generated).pop();
                 
                 return true;
                 
-
             }
 
             dipendenti--;
+            if(dipendenti==0){cv.notify_one();}
+            
             return false;
-        }
 
+        }    
+        
     }
     
 };
@@ -138,8 +140,8 @@ class master{
     
     public:
 
-    vector <worker*> tot_dipendenti;
-    queue  <task*> task_generated;
+    vector <worker> tot_dipendenti;
+    queue  <shared_ptr<task>> task_generated;
 
     //-----------------------------------creazioni tasks e workers-----------------------------------
     void create_tasks(){
@@ -147,45 +149,33 @@ class master{
         for(int i=0;i<lavori;i++){
 
             
-            task_generated.push(new task((rand()%10)+1,type_task[i]));
+            task_generated.push(make_shared<task>((rand()%10)+1,type_task[i]));
             
         }
         
     }
     
     void create_workers(){
-        
+
+        tot_dipendenti.reserve(dipendenti);
+
         for(int i=0;i<dipendenti;i++){
-            
-            tot_dipendenti.emplace_back(new worker(i, task_generated));//reso tutte le variabili di worker visto che non sono utlizzate dall'esterno
+           
+            tot_dipendenti.emplace_back(i, task_generated);//reso tutte le variabili di worker visto che non sono utlizzate dall'esterno
 
         }
         
     }
 
-    //libera la memoria allocata dinamicamente
-    void delete_workers(){
+    void finish_threads(){
 
-        for(auto w : tot_dipendenti){
+        for(auto& w : tot_dipendenti){
 
-            w->join_thread();
-            delete w;
+            w.join_thread();
 
         }
     }
-
-    void delete_tasks()
-    {
-
-        while (!task_generated.empty()){
-
-            delete task_generated.front();        
-            task_generated.pop();
-
-        }
-
-
-    }    
+  
     
 };
 
@@ -199,23 +189,15 @@ int main()
     M.create_tasks();
     M.create_workers();
     
-    while(true){
-        
-        {
-            
-            lock_guard<mutex> lock(dip);
-            
-            if(dipendenti==0)break;
-            
-        }
-        
+    {
+        unique_lock<mutex> lock(m);
+        cv.wait(lock,[]{return(dipendenti==0)?true:false;});
+
     }
     
+    
     cout<<"tutti i lavoratori hanno finito di lavorare\n";
-
-    //elimino memoria allocata
-    M.delete_workers();
-    M.delete_tasks();
+    M.finish_threads();
 
     return 0;
 }
@@ -267,6 +249,5 @@ se facciamo &task_generated e non ref(task_generated) il problema cade in quanto
 PUNTANDO DIRETTAMENTE ALLA CELLA senza variabili intermediarie che è caso del ref(...)
 
 quindi se mai noi lavoriamo con dei vector stare sempre attenti con l'utilizzo del ref()
-
 
 */
