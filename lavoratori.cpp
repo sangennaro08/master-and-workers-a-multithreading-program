@@ -5,33 +5,35 @@
 #include <queue>
 #include <memory>
 #include <condition_variable>
+#include <atomic>
+#include <chrono>
 
 using namespace std;
 
 class task;
 
-mutex mut;
-mutex dip;
-mutex m;
+mutex task_finished;
+mutex do_tasks;
+mutex wait_ending_workers;
 
-condition_variable cv;
+condition_variable continue_in_main;
 //variabili globali 
-int lavori=20;
-int dipendenti=5;
+atomic<int> tasks_to_do=20;
+atomic<int> workers_doing_tasks=5;
 
-string type_task[20]={"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t"};
+vector<char> type_task;
 
 //classe task con i suoi rispettivi attributi
 class task{
     
     public:
-    size_t tempo_necessario;
-    string tipo;
+    size_t do_task_time;
+    char type_of_work;
 
-    task(size_t t,string type){
+    task(size_t t,char type){
 
-        tempo_necessario=t;
-        tipo=type;
+        do_task_time=t;
+        type_of_work=type;
 
     }
 
@@ -43,8 +45,8 @@ class worker{
     private:
 
     thread th;
-    shared_ptr<task> t;
-    int ID_worker=0;
+    shared_ptr<task> task_given;
+    int ID_worker;
 
     public:
     //creazione thread che lavora    
@@ -53,9 +55,9 @@ class worker{
         ID_worker=ID;  
         
         {
-            lock_guard<mutex> lock(dip);
+            lock_guard<mutex> lock(do_tasks);
 
-            t=task_generated.front();
+            task_given=task_generated.front();
             task_generated.pop();
             
             th=thread(&worker::work_task,this,&task_generated);//errore per refence dandling meglio farlo con puntatore come fatto qua
@@ -71,22 +73,20 @@ class worker{
         while(true){
 
                 {
-                    lock_guard<mutex> lock(mut);
-                    cout<<"il lavoratore "<<ID_worker<<" sta iniziando la task di tipo "<<t->tipo<<" che dura "
-                    <<t->tempo_necessario<<" secondi\n\n";
+                    lock_guard<mutex> lock(task_finished);
+                    cout<<"il lavoratore "<<ID_worker<<" sta iniziando la task di tipo "<<task_given->type_of_work<<" che dura "
+                    <<task_given->do_task_time<<" secondi\n\n";
                 }
     
-                this_thread::sleep_for(chrono::seconds(t->tempo_necessario));//simulo task da fare al worker
+                this_thread::sleep_for(chrono::seconds(task_given->do_task_time));//simulo task da fare al worker
        
                 {
-                    lock_guard<mutex> lock(mut);
+                    lock_guard<mutex> lock(task_finished);
                     
-                    cout<<"il lavoratore "<<ID_worker<<" ha completato la task di tipo "<<t->tipo<<" che è durato "
-                    <<t->tempo_necessario<<" secondi\n\n";
+                    cout<<"il lavoratore "<<ID_worker<<" ha completato la task di tipo "<<task_given->type_of_work<<" che è durato "
+                    <<task_given->do_task_time<<" secondi\n\n";
 
-                    bool controllo=get_new_task(*(&task_generated));
-
-                    if(!controllo)return;
+                    if(!get_new_task(*(&task_generated)))return;
                 }
 
                 
@@ -110,23 +110,22 @@ bool get_new_task(queue <shared_ptr<task>>* task_generated){
         //se il thread vede che ci sono altre tasks prende quella per ultima inserita e viene tolta(tolto dall'utilizzo ma non dinamicamente)
         {
 
-        lock_guard<mutex> lock(dip);//dip e non mut così evito overlapping dei testi in uscita
+        lock_guard<mutex> lock(do_tasks);//dip e non mut così evito overlapping dei testi in uscita
 
             if(!(*task_generated).empty()){
 
                 
                 
-                t=(*task_generated).front();
-                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(*task_generated).front()->tipo<<"\n\n";
+                task_given=(*task_generated).front();
+                cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(*task_generated).front()->type_of_work<<"\n\n";
                 (*task_generated).pop();
                 
                 return true;
                 
             }
 
-            dipendenti--;
-            if(dipendenti==0){cv.notify_one();}
-            
+            workers_doing_tasks--;
+            if(!workers_doing_tasks)continue_in_main.notify_one();           
             return false;
 
         }    
@@ -143,12 +142,11 @@ class master{
     vector <worker> tot_dipendenti;
     queue  <shared_ptr<task>> task_generated;
 
-    //-----------------------------------creazioni tasks e workers-----------------------------------
+    //-----------------------------------creazioni tasks e workers-----------------------------------//
     void create_tasks(){
         
-        for(int i=0;i<lavori;i++){
-
-            
+        for(int i=0;i<tasks_to_do;i++){
+           
             task_generated.push(make_shared<task>((rand()%10)+1,type_task[i]));
             
         }
@@ -157,14 +155,35 @@ class master{
     
     void create_workers(){
 
-        tot_dipendenti.reserve(dipendenti);
+        if(workers_doing_tasks>=tasks_to_do){
 
-        for(int i=0;i<dipendenti;i++){
+            int diminuire=workers_doing_tasks-tasks_required;
+            workers_doing_tasks-=diminuire;
+
+            cout<<"dipendenti diminuiti a "<<workers_doing_tasks<<" in quanto sono stati inseriti di più di quanto necessari\n\n";
+            
+        }
+
+        tot_dipendenti.reserve(workers_doing_tasks);
+
+        for(int i=0;i<workers_doing_tasks;i++){
            
             tot_dipendenti.emplace_back(i, task_generated);//reso tutte le variabili di worker visto che non sono utlizzate dall'esterno
 
         }
         
+    }
+
+    void name_tasks(){
+
+        type_task.reserve(tasks_to_do);
+
+        for(int i=65;i<tasks_to_do+65;i++){
+
+            type_task.push_back(i);
+
+        }
+
     }
 
     void finish_threads(){
@@ -186,12 +205,13 @@ int main()
     master M;
     
     //inizializzazione dipendenti e lavori
+    M.name_tasks();
     M.create_tasks();
     M.create_workers();
     
     {
-        unique_lock<mutex> lock(m);
-        cv.wait(lock,[]{return(dipendenti==0)?true:false;});
+        unique_lock<mutex> lock(wait_ending_workers);
+        continue_in_main.wait(lock,[]{return !workers_doing_tasks;});
 
     }
     
