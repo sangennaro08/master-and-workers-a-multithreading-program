@@ -27,10 +27,10 @@ mutex wait_ending_workers;
 condition_variable continue_the_main;
 
 atomic<int> tasks_required=20;
-atomic<int> workers_doing_tasks=30;
+atomic<int> workers_doing_tasks=5;
 
 //nome tasks
-vector<char> type_task;
+vector<string> type_task;
 
 //classe task ha le informazioni necessarie per il promise e future anche alla costruione del lavoro che il dipendente deve fare
 class task{
@@ -38,14 +38,14 @@ class task{
     public:
 
     size_t do_task_time;
-    char type_of_work;
+    string type_of_work;
     double num1;
     double num2;
 
     promise<double> adding;
     future <double> finish_adding;
 
-    task(size_t t,char type){
+    task(size_t t,string type){
 
         do_task_time=t;
         type_of_work=type;
@@ -218,9 +218,9 @@ class master{
 
         type_task.reserve(tasks_required);
 
-        for(int i=65;i<tasks_required+65;i++){
+        for(int i=0;i<tasks_required;i++){
 
-            type_task.push_back(i);
+            type_task.push_back("A"+to_string(i));
 
         }
 
