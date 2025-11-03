@@ -21,16 +21,16 @@ condition_variable continue_in_main;
 atomic<int> tasks_to_do=20;
 atomic<int> workers_doing_tasks=5;
 
-vector<char> type_task;
+vector<string> type_task;
 
 //classe task con i suoi rispettivi attributi
 class task{
     
     public:
     size_t do_task_time;
-    char type_of_work;
+    string type_of_work;
 
-    task(size_t t,char type){
+    task(size_t t,string type){
 
         do_task_time=t;
         type_of_work=type;
@@ -55,12 +55,16 @@ class worker{
         ID_worker=ID;  
         
         {
+            if(!task_generated.empty()){
+
             lock_guard<mutex> lock(do_tasks);
 
             task_given=task_generated.front();
             task_generated.pop();
             
             th=thread(&worker::work_task,this,&task_generated);//errore per refence dandling meglio farlo con puntatore come fatto qua
+            
+            }
         }
         
                
@@ -157,7 +161,7 @@ class master{
 
         if(workers_doing_tasks>=tasks_to_do){
 
-            int diminuire=workers_doing_tasks-tasks_required;
+            int diminuire=workers_doing_tasks-tasks_to_do;
             workers_doing_tasks-=diminuire;
 
             cout<<"dipendenti diminuiti a "<<workers_doing_tasks<<" in quanto sono stati inseriti di più di quanto necessari\n\n";
@@ -178,9 +182,9 @@ class master{
 
         type_task.reserve(tasks_to_do);
 
-        for(int i=65;i<tasks_to_do+65;i++){
+        for(int i=0;i<tasks_to_do;i++){
 
-            type_task.push_back(i);
+            type_task.push_back("A"+to_string(i));
 
         }
 
