@@ -9,15 +9,15 @@
 #include <chrono>
 
 using namespace std;
-
+ 
 class task;
-
+//variabili globali
 mutex task_finished;
 mutex do_tasks;
 mutex wait_ending_workers;
 
 condition_variable continue_in_main;
-//variabili globali 
+
 atomic<int> tasks_to_do=20;
 atomic<int> workers_doing_tasks=5;
 
@@ -49,7 +49,7 @@ class worker{
     int ID_worker;
 
     public:
-    //creazione thread che lavora    
+    //-----------------------------------costruttore che crea il thread di worker-----------------------------------//      
     worker(int ID,queue <shared_ptr<task>>& task_generated){
         
         ID_worker=ID;  
@@ -69,9 +69,7 @@ class worker{
         
                
     }
-
-    //il thread lavora le tasks
-    
+    //-----------------------------------funzione che simula il lavoro delle task-----------------------------------//
     void work_task(queue <shared_ptr<task>>* task_generated){
         
         while(true){
@@ -98,7 +96,7 @@ class worker{
         }
         
     }
-
+    //-----------------------------------terminazione thread chiamato dal master-----------------------------------//
    void join_thread() {
 
     if (th.joinable()) {
@@ -117,16 +115,14 @@ bool get_new_task(queue <shared_ptr<task>>* task_generated){
         lock_guard<mutex> lock(do_tasks);//dip e non mut così evito overlapping dei testi in uscita
 
             if(!(*task_generated).empty()){
-
-                
-                
+               
                 task_given=(*task_generated).front();
                 cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(*task_generated).front()->type_of_work<<"\n\n";
                 (*task_generated).pop();
                 
                 return true;
                 
-            }
+            }//viene definito quale task è stata presa da ogni worker se presente
 
             workers_doing_tasks--;
             if(!workers_doing_tasks)continue_in_main.notify_one();           
@@ -159,7 +155,7 @@ class master{
     
     void create_workers(){
 
-        if(workers_doing_tasks>=tasks_to_do){
+        if(workers_doing_tasks>tasks_to_do){
 
             int diminuire=workers_doing_tasks-tasks_to_do;
             workers_doing_tasks-=diminuire;
@@ -189,7 +185,7 @@ class master{
         }
 
     }
-
+    //-----------------------------------terminazione thread-----------------------------------//
     void finish_threads(){
 
         for(auto& w : tot_dipendenti){
@@ -214,64 +210,13 @@ int main()
     M.create_workers();
     
     {
-        unique_lock<mutex> lock(wait_ending_workers);
+        unique_lock<mutex> lock(wait_ending_workers);               //condition variable per far sprecare meno uso della CPU
         continue_in_main.wait(lock,[]{return !workers_doing_tasks;});
 
     }
-    
-    
+        
     cout<<"tutti i lavoratori hanno finito di lavorare\n";
     M.finish_threads();
 
     return 0;
 }
-
-/*
-cosa ho scoperto?
-scrivere 
-
-t->tipo e *t.tipo infatti
-
-t->tipo=*t.tipo
-
-infatti la freccia deferenzia per arrivare alla zona effettiva in cui si trova il vector
-
-QUINDI 
-
-vector <task*>** task_generated 
-
-se volessi masi accedere al suo interno faccio in 2 modi diversi
-
-1)
-
-(**task_generated). ...
-
-oppure 
-
-2)
-
-*task_generated-> ...
-
-per far passare a una funzione un puntatore per renderlo un double pointer fare
-
-vector <task*>** task_generated
-
-func(&task_generated)
-
-poi fare
-
-void func(vector <task*>** task_generated){...}
-
-quando accade il dangling reference
-
-dangling reference:accesso a una cella di memoria non valida o deallocata,senza alcun dato utile al programma dato.
-
-era un problema in questo esercizio visto che ref che crea un collegamento al vector effettivo SE casualmente ci fosse stato un worker 
-appena nato nel costruttore e faceva un pop_back allora la zona puntata diventava non valida
-
-se facciamo &task_generated e non ref(task_generated) il problema cade in quanto anche se viene tolto quell'elemento STIAMO 
-PUNTANDO DIRETTAMENTE ALLA CELLA senza variabili intermediarie che è caso del ref(...)
-
-quindi se mai noi lavoriamo con dei vector stare sempre attenti con l'utilizzo del ref()
-
-*/
