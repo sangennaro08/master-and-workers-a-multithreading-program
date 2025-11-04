@@ -41,6 +41,7 @@ class task{
     string type_of_work;
     double num1;
     double num2;
+    double result;
 
     promise<double> adding;
     future <double> finish_adding;
@@ -62,24 +63,22 @@ class worker{
     private:
 
     int ID_worker;
-    shared_ptr<task> task_given;
+    vector<shared_ptr<task>> task_given;
     thread th;
     mt19937 generatore;
     
     public:
 
     worker(int ID,queue <shared_ptr<task>>& task_generated):
-    generatore(chrono::system_clock::now().time_since_epoch().count() + ID)
+    generatore(chrono::system_clock::now().time_since_epoch().count() + ID),ID_worker(ID)
     {
-
-        ID_worker=ID;
 
         {
             lock_guard<mutex> lock(do_tasks);
 
             if(!task_generated.empty()){
 
-            task_given=task_generated.front();
+            task_given.push_back(task_generated.front());
             
             task_generated.pop();
             
@@ -90,33 +89,35 @@ class worker{
         }
 
     }
-
+    //-----------------------------------funzione che simula il lavoro di ogni worker-----------------------------------//
     void start_work(queue <shared_ptr<task>>* task_generated){
         
         while(true){
 
+            //lock guard dove chiamiamo una funzione per fare una somma
             {               
                 lock_guard<mutex> lock(tasks_finished);
-                cout<<"il lavoratore "<<ID_worker<<" sta iniziando la task di tipo "<<task_given->type_of_work<<" che dura "
-                <<task_given->do_task_time<<" secondi\n\n";
+                cout<<"il lavoratore "<<ID_worker<<" sta iniziando la task di tipo "<<task_given.back()->type_of_work<<" che dura "
+                <<task_given.back()->do_task_time<<" secondi\n\n";
             
-                thread ta(&worker::adopera,this,&task_given->adding);
-                ta.join();
+                adopera(&task_given.back()->adding);
 
             }
 
-            this_thread::sleep_for(chrono::seconds(task_given->do_task_time));//simulo task da fare al worker
+            this_thread::sleep_for(chrono::seconds(task_given.back()->do_task_time));//simulo task da fare al worker
 
+            //stampo il risultato della somma
             {
                 lock_guard<mutex> lock(tasks_finished);
-                double result=task_given->finish_adding.get();
+                task_given.back()->result=task_given.back()->finish_adding.get();
 
-                cout<<"il thread con ID "<<ID_worker<<" ha finito il lavoro "<<task_given->type_of_work<<",esso era una somma e gli è durato "
-                <<task_given->do_task_time<<" secondi"<<" i numeri erano "<<task_given->num1<<" e "<<task_given->num2<<" abbiamo ottenuto "
-                <<result<<"\n\n";
+                cout<<"il lavoratore con ID "<<ID_worker<<" ha finito il lavoro "<<task_given.back()->type_of_work<<",esso era una somma e gli è durato "
+                <<task_given.back()->do_task_time<<" secondi"<<" i numeri erano "<<task_given.back()->num1<<" e "<<task_given.back()->num2<<" abbiamo ottenuto "
+                <<task_given.back()->result<<"\n\n";
 
+                //funzione per controllare se ci sono altre task dentro la coda
                 if(!get_new_work(*(&task_generated)))return;
-
+                
             }
                        
         }
@@ -132,7 +133,7 @@ class worker{
 
             if(!(*task_generated).empty()){
 
-                task_given=(*task_generated).front();
+                task_given.push_back((*task_generated).front());
                 cout<<"il lavoratore "<<ID_worker<<" ha deciso di prendere il lavoro di tipo "<<(*task_generated).front()->type_of_work<<"\n\n";
                 (*task_generated).pop();
 
@@ -144,9 +145,9 @@ class worker{
 
             if(!workers_doing_tasks){continue_the_main.notify_one();}
             return false;
-            
+
         }
-        
+               
     }   
 
     //controlla se il thread è terminabile
@@ -158,19 +159,30 @@ class worker{
 
     //somma dei numeri
     void adopera(promise <double>* adding){
-        
-        {
-            lock_guard<mutex> lock(do_tasks);
 
-            uniform_int_distribution<int> distribution(0, 99);//indichiamo un numero che verrà generato tra 0 e 99
+        uniform_int_distribution<int> distribution(0, 99);//indichiamo un numero che verrà generato tra 0 e 99
             
 
-            task_given->num1 = distribution(generatore);//generare numero da 0 a 99
-            task_given->num2 = distribution(generatore);
+        task_given.back()->num1 = distribution(generatore);//generare numero da 0 a 99
+        task_given.back()->num2 = distribution(generatore);
 
-            adding->set_value(task_given->num1 + task_given->num2);//mandare risultato a result nel mentre che aspetta
+        adding->set_value(task_given.back()->num1 + task_given.back()->num2);//mandare risultato a result nel mentre che aspetta
+
+    }
+    
+    //-----------------------------------stampa in output tutte le task fatte dal singolo worker(funzione chiamata dal master)-----------------------------------//
+    void show_results(){
+        
+        cout<<"il lavoratore con ID:"<<ID_worker<<" ha fatto le task\n";
+        
+        for(int i=0;i<task_given.size();i++){
+            
+            cout<<task_given.at(i)->type_of_work<<" e ha ottenuto "<<task_given.at(i)->result<<"\n";
+            
         }
 
+        cout<<"\n\n";
+        
     }
 
 };
@@ -181,10 +193,10 @@ class master{
 
     vector <worker> workers;
     queue <shared_ptr<task>> task_generated;
-
+    //-----------------------------------creazione tasks e workers-----------------------------------//
     void create_workers(){
 
-        if(workers_doing_tasks>=tasks_required){
+        if(workers_doing_tasks>tasks_required){
 
             int diminuire=workers_doing_tasks-tasks_required;
             workers_doing_tasks-=diminuire;
@@ -226,7 +238,7 @@ class master{
 
 
     }
-
+    //-----------------------------------terminazione thread-----------------------------------//
    void finish_threads(){
 
         for(auto& w : workers){
@@ -234,6 +246,17 @@ class master{
             w.control_thread();
         }
 
+    }
+    
+    //-----------------------------------funzione che chiama ogni singolo worker per mostrare le task da ogniuno fatte-----------------------------------//
+    void show_tasks(){
+        
+        for(auto& w : workers){
+            
+            w.show_results();
+            
+        }
+        
     }
 
 };
@@ -255,31 +278,9 @@ int main(){
         continue_the_main.wait(lock,[]{return !workers_doing_tasks;});
     }
         
-    cout<<"tutti i dipendenti hanno finito di lavorare\n";
+    cout<<"tutti i dipendenti hanno finito di lavorare\n\n";
+    M.show_tasks();
     M.finish_threads();//i thread dentro worker vengono joinati
 
     return 0;
 }
-
-/*
-problemi affrontati per la miglioria del codice...
-
-1)movimento del vettore nell'heap costante durante la selezione delle task per gli worker
-
-per risolvere il problema ho utlizzato una funzione dei vettori chiamata 
-
-nome.reserve(n);
-
-indica al vettore di prendere in anticipo n celle di memoria per la allocazione di memoria questo permette al vettore di prendere uno spazio
-totale gia dall'inizio senza che esso debba muoversi facendo dei push_back
-
-2)utilizzo di smart pointers
-
-utilizzati per evitare l'utlizzo di distruttori e togliere il pensiero sulla deallocazione di memoria(il controllo del funzionamento dei 
-thread nche se la cella non è piu utlizzata dal queue è ancora con un controllo manuale)
-
-è stato modificato anche la funzione che disabilita i thread con l'aggiunta di un & nelle parentesi rotonde,infatti senza di esso
-non troverebbe gli effettivi oggetti collocati in memoria in quanto eliminati da soli a causa degli smart pointers.
-
-
-*/
