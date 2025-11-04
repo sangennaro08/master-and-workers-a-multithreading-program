@@ -16,21 +16,21 @@ mutex task_finished;
 mutex do_tasks;
 mutex wait_ending_workers;
 
-condition_variable continue_in_main;//per evitare spreco dell'suo della CPU
+condition_variable continue_in_main;
 
 atomic<int> tasks_to_do=20;
 atomic<int> workers_doing_tasks=5;
 
-vector<string> type_task;//nome delle task
+vector<string> type_task;
 
 //classe task con i suoi rispettivi attributi
-class task{
+class Task{
     
     public:
     size_t do_task_time;
     string type_of_work;
 
-    task(size_t t,string type){
+    Task(size_t t,string type){
 
         do_task_time=t;
         type_of_work=type;
@@ -40,17 +40,17 @@ class task{
 };
 
 //worker che ha come compito principale quello di lavorare i processi da loro scelti dal queue di task
-class worker{
+class Worker{
     
     private:
 
     thread th;
-    shared_ptr<task> task_given;
+    shared_ptr<Task> task_given;
     int ID_worker;
 
     public:
     //-----------------------------------costruttore che crea il thread di worker-----------------------------------//      
-    worker(int ID,queue <shared_ptr<task>>& task_generated):ID_worker(ID){
+    Worker(int ID,queue <shared_ptr<Task>>& task_generated):ID_worker(ID){
 
         {
             if(!task_generated.empty()){
@@ -60,7 +60,7 @@ class worker{
             task_given=task_generated.front();
             task_generated.pop();
             
-            th=thread(&worker::work_task,this,&task_generated);//errore per refence dandling meglio farlo con puntatore come fatto qua
+            th=thread(&Worker::work_task,this,&task_generated);//errore per refence dandling meglio farlo con puntatore come fatto qua
             
             }
         }
@@ -68,7 +68,7 @@ class worker{
                
     }
     //-----------------------------------funzione che simula il lavoro delle task-----------------------------------//
-    void work_task(queue <shared_ptr<task>>* task_generated){
+    void work_task(queue <shared_ptr<Task>>* task_generated){
         
         while(true){
 
@@ -105,7 +105,7 @@ class worker{
 
     }
 
-bool get_new_task(queue <shared_ptr<task>>* task_generated){
+bool get_new_task(queue <shared_ptr<Task>>* task_generated){
 
         //se il thread vede che ci sono altre tasks prende quella per ultima inserita e viene tolta(tolto dall'utilizzo ma non dinamicamente)
         {
@@ -133,19 +133,19 @@ bool get_new_task(queue <shared_ptr<task>>* task_generated){
 };
 
 //ha sotto controllo i lavoratori che li genera assieme alle task(ha come compito anche quello di congedare i dipendenti)
-class master{
+class Master{
     
     public:
 
-    vector <worker> tot_dipendenti;
-    queue  <shared_ptr<task>> task_generated;
+    vector <Worker> tot_dipendenti;
+    queue  <shared_ptr<Task>> task_generated;
 
     //-----------------------------------creazioni tasks e workers-----------------------------------//
     void create_tasks(){
         
         for(int i=0;i<tasks_to_do;i++){
            
-            task_generated.push(make_shared<task>((rand()%10)+1,type_task[i]));
+            task_generated.push(make_shared<Task>((rand()%10)+1,type_task[i]));
             
         }
         
@@ -200,7 +200,7 @@ int main()
 {
     srand(time(nullptr));
     
-    master M;
+    Master M;
     
     //inizializzazione dipendenti e lavori
     M.name_tasks();
