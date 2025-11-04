@@ -26,7 +26,7 @@ atomic<int> workers_doing_tasks=5;
 vector<string> type_task;
 
 //classe task ha le informazioni necessarie per il promise e future anche alla costruione del lavoro che il dipendente deve fare
-class task{
+class Task{
 
     public:
 
@@ -39,7 +39,7 @@ class task{
     promise<double> adding;
     future <double> finish_adding;
 
-    task(size_t t,string type){
+    Task(size_t t,string type){
 
         do_task_time=t;
         type_of_work=type;
@@ -51,18 +51,18 @@ class task{
 };
 
 //fa il lavoro che gli è stato assegnato e se ne prende un altro in caso ce ne è uno libero
-class worker{
+class Worker{
 
     private:
 
     int ID_worker;
-    vector<shared_ptr<task>> task_given;
+    vector<shared_ptr<Task>> task_given;
     thread th;
     mt19937 generatore;
     
     public:
 
-    worker(int ID,queue <shared_ptr<task>>& task_generated):
+    Worker(int ID,queue <shared_ptr<Task>>& task_generated):
     generatore(chrono::system_clock::now().time_since_epoch().count() + ID),ID_worker(ID)
     {
 
@@ -75,7 +75,7 @@ class worker{
             
             task_generated.pop();
             
-            th=thread(&worker::start_work,this,&task_generated);//evidenzia in base all'oggetto l'indirizzo della funzione
+            th=thread(&Worker::start_work,this,&task_generated);//evidenzia in base all'oggetto l'indirizzo della funzione
 
             }
             
@@ -83,7 +83,7 @@ class worker{
 
     }
     //-----------------------------------funzione che simula il lavoro di ogni worker-----------------------------------//
-    void start_work(queue <shared_ptr<task>>* task_generated){
+    void start_work(queue <shared_ptr<Task>>* task_generated){
         
         while(true){
 
@@ -119,7 +119,7 @@ class worker{
 
 
     //funzione che permette a un worker di ottenere un lavoro disponibile al momento
-    bool get_new_work(queue <shared_ptr<task>>* task_generated){
+    bool get_new_work(queue <shared_ptr<Task>>* task_generated){
 
         {
             lock_guard<mutex> lock(do_tasks);
@@ -180,12 +180,12 @@ class worker{
 
 };
 
-class master{
+class Master{
 
     public:
 
-    vector <worker> workers;
-    queue <shared_ptr<task>> task_generated;
+    vector <Worker> workers;
+    queue <shared_ptr<Task>> task_generated;
     //-----------------------------------creazione tasks e workers-----------------------------------//
     void create_workers(){
 
@@ -213,7 +213,7 @@ class master{
 
         for(int i=0; i<tasks_required; i++){
 
-            task_generated.push(make_shared<task>((rand()%10)+1,type_task[i]));
+            task_generated.push(make_shared<Task>((rand()%10)+1,type_task[i]));
             
         }
 
@@ -258,7 +258,7 @@ int main(){
 
     srand(time(0));
 
-    master M;//allocato nello stack
+    Master M;//allocato nello stack
 
     //start del lavoro dei workers_doing_tasks
     M.name_tasks();
@@ -277,4 +277,3 @@ int main(){
 
     return 0;
 }
-
