@@ -16,12 +16,12 @@ mutex task_finished;
 mutex do_tasks;
 mutex wait_ending_workers;
 
-condition_variable continue_in_main;
+condition_variable continue_in_main;//per evitare spreco dell'suo della CPU
 
 atomic<int> tasks_to_do=20;
 atomic<int> workers_doing_tasks=5;
 
-vector<string> type_task;
+vector<string> type_task;//nome delle task
 
 //classe task con i suoi rispettivi attributi
 class task{
@@ -50,10 +50,8 @@ class worker{
 
     public:
     //-----------------------------------costruttore che crea il thread di worker-----------------------------------//      
-    worker(int ID,queue <shared_ptr<task>>& task_generated){
-        
-        ID_worker=ID;  
-        
+    worker(int ID,queue <shared_ptr<task>>& task_generated):ID_worker(ID){
+
         {
             if(!task_generated.empty()){
 
