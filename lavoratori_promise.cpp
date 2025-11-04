@@ -13,13 +13,6 @@
 
 using namespace std;
 
-/*
-
-utlizzo di do_tasks e task_finished è importante, se rimpiazzo una delle due e uso l'altra allora
-avviene un deadlock(errore grave)
-
-*/
-
 mutex tasks_finished;
 mutex do_tasks;
 mutex wait_ending_workers;
@@ -284,3 +277,4 @@ int main(){
 
     return 0;
 }
+
